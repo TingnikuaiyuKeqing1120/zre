@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZRE · ZCode 模型配置编辑器</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="logo">Z</span>
+    <div class="brand-text">
+      <b>ZRE</b>
+      <span class="sub">ZCode 模型配置编辑器</span>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="btn-snapshots">⏳ 快照</button>
+    <button class="btn" id="btn-settings">⚙ 设置</button>
+    <button class="btn" id="btn-raw">{ } JSON</button>
+    <button class="btn" id="btn-reload">⟲ 重新加载</button>
+    <button class="btn primary" id="btn-save">保存<span class="kbd">Ctrl+S</span></button>
+    <button class="btn icon" id="btn-quit" title="退出 ZRE（进程结束，托盘图标一并移除）">⏻</button>
+  </div>
+</header>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div class="side-tools">
+      <input id="search" type="search" placeholder="搜索提供商 / 模型…" autocomplete="off">
+      <button class="btn accent" id="btn-add-provider" title="新增模型提供商">＋</button>
+    </div>
+    <div id="prov-list"></div>
+    <div class="side-hint" id="side-hint">拖动 ⋮⋮ 可调整 zcode 中的提供商显示顺序</div>
+  </aside>
+
+  <main id="main"></main>
+</div>
+
+<footer id="statusbar">
+  <span id="st-path" class="st-item mono" title="点击复制配置文件路径"></span>
+  <span id="st-stats" class="st-item"></span>
+  <span class="spacer"></span>
+  <span id="st-dirty" class="st-item"></span>
+</footer>
+
+<dialog id="dlg-generic"><div class="dlg-body" id="dlg-generic-body"></div></dialog>
+
+<dialog id="dlg-snapshots">
+  <div class="dlg-body">
+    <div class="dlg-head">
+      <h3>快照管理</h3>
+      <button class="btn icon" data-close>✕</button>
+    </div>
+    <p class="hint">快照是 <span class="mono">~/.zcode/v2/snapshots/</span> 下的完整配置副本；恢复前会自动备份当前配置。</p>
+    <div class="snap-save">
+      <input id="snap-name" type="text" placeholder="快照名称，如：改档位前-2026-09-06">
+      <button class="btn accent" id="btn-snap-create">保存当前配置为快照</button>
+    </div>
+    <div id="snap-list"></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-raw">
+  <div class="dlg-body wide">
+    <div class="dlg-head">
+      <h3>配置原始内容（含未保存修改）</h3>
+      <div>
+        <button class="btn" id="btn-raw-copy">复制</button>
+        <button class="btn icon" data-close>✕</button>
+      </div>
+    </div>
+    <pre class="raw-view" id="raw-view"></pre>
+  </div>
+</dialog>
+
+<div id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

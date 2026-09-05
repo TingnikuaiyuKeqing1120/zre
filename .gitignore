@@ -1,0 +1,11 @@
+# Binaries
+bin/
+dist/
+*.exe
+
+# Local test data
+testdata/
+
+# Go
+*.test
+*.out
