@@ -565,12 +565,9 @@ func (sv *Server) handleAutoReason(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, envelope{OK: false, Error: err.Error()})
 		return
 	}
+	// 无论是否命中都返回完整 state：前端 apply() 依赖它，缺失会导致界面“冻结”
 	extra := map[string]any{"matched": matched, "source": source, "label": label}
-	if matched {
-		writeJSON(w, 200, envelope{OK: true, State: sv.wrapState(sv.store.State()), Extra: extra})
-		return
-	}
-	writeJSON(w, 200, envelope{OK: true, Extra: extra})
+	writeJSON(w, 200, envelope{OK: true, State: sv.wrapState(sv.store.State()), Extra: extra})
 }
 
 func (sv *Server) handleAutoReasonAll(w http.ResponseWriter, r *http.Request) {

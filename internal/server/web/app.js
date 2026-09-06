@@ -80,6 +80,7 @@ function findModel(pid, mid) {
 }
 
 function apply(resp) {
+  if (!resp.state) return; // 个别端点（如未命中的自动匹配）不带 state，避免把全局状态清成 undefined
   state = resp.state;
   const p = findProvider(sel.providerId);
   if (!p) {
@@ -1344,24 +1345,38 @@ function openSettings(focusSection) {
 /* ---------- 顺序调整弹窗（拖动 + ↑↓） ---------- */
 
 // 通用列表重排弹窗：items=[{id,label,sub}]，完成后 onCommit(新顺序 id 数组)。
+// 交互：↑↓ 点击（保持滚动与焦点，方便连续点击）；拖动为“挤压式”——经过其他行时实时换位。
 function openReorderDialog({ title, hint, items, onCommit }) {
   const body = $("#dlg-generic-body");
   let order = items.map(x => ({ ...x }));
   let changed = false;
+  let lastScroll = 0;
 
-  const render = () => {
+  const syncFromDOM = () => {
+    const ids = [...body.querySelectorAll("#ro-list .ro-row")].map(r => r.dataset.id);
+    if (ids.length !== order.length) return;
+    const next = ids.map(id => order.find(x => x.id === id)).filter(Boolean);
+    const before = order.map(x => x.id).join("\u0000");
+    const after = next.map(x => x.id).join("\u0000");
+    order = next;
+    if (before !== after) changed = true;
+  };
+
+  const render = (focusId, focusSel) => {
+    const oldList = body.querySelector("#ro-list");
+    if (oldList) lastScroll = oldList.scrollTop;
     body.innerHTML = `
       <div class="dlg-head"><h3>${esc(title)}</h3><button type="button" class="btn icon" data-ro-close>✕</button></div>
       ${hint ? `<p class="hint">${hint}</p>` : ""}
       <div id="ro-list">
-        ${order.map((it, i) => `
-          <div class="ro-row" draggable="true" data-ro-i="${i}">
-            <span class="grip" data-ro-grip title="拖动调整顺序">⋮⋮</span>
+        ${order.map(it => `
+          <div class="ro-row" draggable="true" data-id="${esc(it.id)}">
+            <span class="grip" data-ro-grip title="按住拖动调整顺序">⋮⋮</span>
             <span class="ro-label" title="${esc(it.label)}">${esc(it.label)}</span>
             ${it.sub ? `<span class="s-meta mono">${esc(it.sub)}</span>` : ""}
             <span class="ro-btns">
-              <button type="button" class="btn icon" data-ro-up ${i === 0 ? "disabled" : ""} title="上移">↑</button>
-              <button type="button" class="btn icon" data-ro-down ${i === order.length - 1 ? "disabled" : ""} title="下移">↓</button>
+              <button type="button" class="btn icon" data-ro-up title="上移">↑</button>
+              <button type="button" class="btn icon" data-ro-down title="下移">↓</button>
             </span>
           </div>`).join("")}
       </div>
@@ -1370,50 +1385,88 @@ function openReorderDialog({ title, hint, items, onCommit }) {
         <button type="button" class="btn primary" data-ro-done>完成${changed ? "（已调整）" : ""}</button>
       </div>`;
 
+    wire();
+    const list = body.querySelector("#ro-list");
+    list.scrollTop = lastScroll;
+    if (focusId) {
+      const row = body.querySelector(`.ro-row[data-id="${CSS.escape(focusId)}"]`);
+      if (row) {
+        row.scrollIntoView({ block: "nearest" });
+        const b = row.querySelector(focusSel);
+        if (b && !b.disabled) b.focus();
+      }
+    }
+  };
+
+  const wire = () => {
     body.querySelector("[data-ro-close]").onclick = () => $("#dlg-generic").close();
     body.querySelector("[data-ro-cancel]").onclick = () => $("#dlg-generic").close();
     body.querySelector("[data-ro-done]").onclick = () => {
+      syncFromDOM();
       $("#dlg-generic").close();
       if (changed) onCommit(order.map(x => x.id));
     };
-    body.querySelectorAll("[data-ro-up]").forEach((b, i) => b.onclick = () => move(i, i - 1));
-    body.querySelectorAll("[data-ro-down]").forEach((b, i) => b.onclick = () => move(i, i + 1));
 
     const list = body.querySelector("#ro-list");
-    let armed = false;
-    list.addEventListener("mousedown", e => { armed = !!e.target.closest("[data-ro-grip]"); });
-    list.querySelectorAll(".ro-row").forEach(row => {
-      const i = +row.dataset.roI;
+    list.addEventListener("scroll", () => { lastScroll = list.scrollTop; });
+
+    // 首末行的 ↑↓ 置灰
+    const rows = [...list.querySelectorAll(".ro-row")];
+    rows.forEach((row, i) => {
+      row.querySelector("[data-ro-up]").disabled = i === 0;
+      row.querySelector("[data-ro-down]").disabled = i === rows.length - 1;
+    });
+
+    // ↑↓：按 id 定位，交换后重渲染并恢复滚动/焦点
+    rows.forEach(row => {
+      const up = row.querySelector("[data-ro-up]");
+      const down = row.querySelector("[data-ro-down]");
+      const move = delta => {
+        syncFromDOM();
+        const i = order.findIndex(x => x.id === row.dataset.id);
+        const j = i + delta;
+        if (i < 0 || j < 0 || j >= order.length) return;
+        [order[i], order[j]] = [order[j], order[i]];
+        changed = true;
+        render(row.dataset.id, delta < 0 ? "[data-ro-up]" : "[data-ro-down]");
+      };
+      if (up) up.onclick = () => move(-1);
+      if (down) down.onclick = () => move(1);
+    });
+
+    // 拖动（挤压式）：dragover 时实时把拖拽行插到目标行前/后，松手即落定
+    rows.forEach(row => {
+      let armed = false;
+      row.addEventListener("mousedown", e => { armed = !!e.target.closest("[data-ro-grip]"); });
       row.addEventListener("dragstart", e => {
         if (!armed) { e.preventDefault(); return; }
-        row.dataset.roDrag = "1";
         row.classList.add("dragging");
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(i));
+        e.dataTransfer.setData("text/plain", row.dataset.id);
       });
       row.addEventListener("dragover", e => {
         e.preventDefault();
-        list.querySelectorAll(".ro-row").forEach(r => r.classList.remove("ro-drop"));
-        if (+row.dataset.roI !== i) row.classList.add("ro-drop");
+        const src = list.querySelector(".ro-row.dragging");
+        if (!src || src === row) return;
+        const r = row.getBoundingClientRect();
+        const insertBefore = (e.clientY - r.top) < r.height / 2;
+        if (insertBefore && src.nextElementSibling !== row) {
+          list.insertBefore(src, row);
+          changed = true;
+        } else if (!insertBefore && row.nextElementSibling !== src) {
+          list.insertBefore(src, row.nextElementSibling);
+          changed = true;
+        }
       });
-      row.addEventListener("drop", e => {
-        e.preventDefault();
-        const j = +row.dataset.roI;
-        if (j !== i) { const [x] = order.splice(i, 1); order.splice(j, 0, x); changed = true; }
-      });
-      row.addEventListener("dragend", () => {
+      const finishDrag = () => {
+        if (!row.classList.contains("dragging")) return;
         row.classList.remove("dragging");
-        list.querySelectorAll(".ro-row").forEach(r => r.classList.remove("ro-drop"));
-        if (changed) render();
-      });
+        syncFromDOM();
+        render();
+      };
+      row.addEventListener("drop", e => { e.preventDefault(); finishDrag(); });
+      row.addEventListener("dragend", () => finishDrag());
     });
-  };
-
-  const move = (i, j) => {
-    if (j < 0 || j >= order.length || i === j) return;
-    [order[i], order[j]] = [order[j], order[i]];
-    changed = true;
-    render();
   };
 
   render();

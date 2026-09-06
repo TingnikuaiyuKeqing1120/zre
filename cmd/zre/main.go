@@ -23,7 +23,7 @@ import (
 	"zre/internal/tray"
 )
 
-var version = "0.1.1"
+var version = "0.1.2"
 
 // defaultTray 由构建注入：托盘版（-H windowsgui）构建时设为 true，
 // 使 bin/zre-tray.exe 双击即进入托盘模式；控制台版保持 false。
