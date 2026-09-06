@@ -1,5 +1,5 @@
 APP_NAME := zre
-VERSION := 0.1.0
+VERSION := 0.1.1
 
 .PHONY: build build-tray run test vet clean release
 
