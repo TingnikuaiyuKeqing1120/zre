@@ -135,7 +135,6 @@ function renderSidebar() {
     return `
     <div class="prov ${isOpen ? "expanded" : ""} ${sel.providerId === p.id ? "selected" : ""}" data-id="${esc(p.id)}">
       <div class="prov-row" data-action="sel-provider" data-id="${esc(p.id)}" title="${esc(p.id)}">
-        <span class="grip" data-action="drag-grip" title="拖动调整显示顺序">⋮⋮</span>
         <span class="chev" data-action="toggle-expand" data-id="${esc(p.id)}">▶</span>
         <span class="p-main">
           <span class="p-name">${esc(p.name || p.id)}</span>
@@ -210,6 +209,7 @@ function providerView(p) {
     <div class="mhead">
       <h3 style="margin:0">模型 <span class="cnt">${p.models.length}</span></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" data-action="model-reorder" data-pid="${esc(p.id)}" ${p.models.length < 2 ? "disabled" : ""} title="调整模型顺序（拖动或 ↑↓）">⇅ 排序</button>
         ${state.catalogReady ? `<button class="btn" data-action="autoreason-all" data-pid="${esc(p.id)}" title="按官方模型目录为每个模型匹配思考档位（覆盖现有 reasoning 配置，思考开关保持不变）
 目录来源：${esc((state.catalogSources || []).join("；"))}">🎯 全部目录匹配</button>
         <button class="btn icon" data-action="catalog-rescan" title="重新扫描官方模型目录（zcode 更新目录文件后点击刷新）">⟳</button>` : ""}
@@ -219,8 +219,7 @@ function providerView(p) {
     </div>
     <div class="mtable" style="margin-top:10px">
       ${p.models.map(m => `
-        <div class="mrow" draggable="true" data-action="sel-model" data-pid="${esc(p.id)}" data-mid="${esc(m.id)}">
-          <span class="grip mrow-grip" data-action="drag-grip" title="拖动调整模型顺序">⋮⋮</span>
+        <div class="mrow" data-action="sel-model" data-pid="${esc(p.id)}" data-mid="${esc(m.id)}">
           <span class="m-id" title="${esc(m.id)}">${esc(m.id)}</span>
           <span class="m-name">${esc(m.name || "")}</span>
           <span class="m-limits">${m.hasLimit ? `${fmtInt(m.context)} / ${fmtInt(m.output)}` : "—"}</span>
@@ -396,7 +395,7 @@ function welcomeView() {
         <li>保存前会<b>自动备份</b>到 <span class="mono">~/.zcode/v2/backups/</span>。</li>
         <li>「快照」可随时保存 / 恢复完整配置副本（<span class="mono">~/.zcode/v2/snapshots/</span>）。</li>
         <li>「思考档位模板」可把常用档位组合存成模板一键应用；${state.catalogReady ? `官方模型目录已加载 <b>${state.catalogCount}</b> 个带档位模型，可按模型 ID / 系列+版本自动匹配档位。` : "若加载了官方模型目录（models_catalog*.json，可用 --catalog 指定），还能按模型 ID 自动匹配官方档位。"}</li>
-        <li>拖动 <span class="mono">⋮⋮</span> 手柄可调整提供商及提供商内模型的顺序。</li>
+        <li>侧栏底部「⇅ 调整顺序」和提供商页的「⇅ 排序」可调整提供商 / 模型的显示顺序。</li>
         <li><b>保存后需重启 zcode 才会生效</b>（zcode 启动时读取配置）。</li>
       </ul>
     </div>
@@ -716,9 +715,6 @@ document.addEventListener("click", async e => {
         sel.modelId = null;
         renderAll();
         break;
-      case "drag-grip":
-        // 拖动手柄：点击无动作（拖动由 drag 事件处理）
-        break;
       case "toggle-expand":
         expandedId = expandedId === t.dataset.id ? null : t.dataset.id;
         renderSidebar();
@@ -747,6 +743,9 @@ document.addEventListener("click", async e => {
         break;
       case "fetch-models":
         fetchModelsDialog(t.dataset.pid);
+        break;
+      case "model-reorder":
+        openModelReorder(t.dataset.pid);
         break;
       case "rename-provider-id":
         await renameProviderDialog(t.dataset.pid);
@@ -1342,93 +1341,118 @@ function openSettings(focusSection) {
   }
 }
 
-/* ---------- 拖动排序 ---------- */
-/* ---------- 拖动排序 ---------- */
-let dragId = null;
-let provDragArmed = false;
-const provList = $("#prov-list");
-const mainPanel = $("#main");
+/* ---------- 顺序调整弹窗（拖动 + ↑↓） ---------- */
 
-// 提供商排序：只允许从 ⋮⋮ 手柄按下后开始拖动，避免与点击冲突
-provList.addEventListener("mousedown", e => {
-  provDragArmed = !!e.target.closest(".grip");
-});
-provList.addEventListener("dragstart", e => {
-  if (!provDragArmed || query.trim()) { e.preventDefault(); return; }
-  const item = e.target.closest(".prov");
-  if (!item) return;
-  dragId = item.dataset.id;
-  item.classList.add("dragging");
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/plain", dragId);
-});
-provList.addEventListener("dragend", () => {
-  dragId = null;
-  $$(".prov").forEach(el => el.classList.remove("dragging", "drop-before"));
-});
-provList.addEventListener("dragover", e => {
-  if (!dragId) return;
-  e.preventDefault();
-  const item = e.target.closest(".prov");
-  $$(".prov").forEach(el => el.classList.remove("drop-before"));
-  if (item && item.dataset.id !== dragId) item.classList.add("drop-before");
-});
-provList.addEventListener("drop", async e => {
-  e.preventDefault();
-  const item = e.target.closest(".prov");
-  if (!dragId || !item || item.dataset.id === dragId) return;
-  const ids = $$(".prov").map(el => el.dataset.id).filter(id => id !== dragId);
-  const at = ids.indexOf(item.dataset.id);
-  ids.splice(at < 0 ? ids.length : at, 0, dragId);
-  try {
-    apply(await api("/api/provider/reorder", { ids }));
-    toast("顺序已调整（记得保存）", "ok", 2000);
-  } catch (e2) { toast(e2.message, "err"); }
-});
+// 通用列表重排弹窗：items=[{id,label,sub}]，完成后 onCommit(新顺序 id 数组)。
+function openReorderDialog({ title, hint, items, onCommit }) {
+  const body = $("#dlg-generic-body");
+  let order = items.map(x => ({ ...x }));
+  let changed = false;
 
-// 模型排序：提供商视图的模型表格，同样只从 ⋮⋮ 手柄拖动
-let modelDragId = null;
-let modelDragArmed = false;
-mainPanel.addEventListener("mousedown", e => {
-  modelDragArmed = !!e.target.closest(".mrow-grip");
-});
-mainPanel.addEventListener("dragstart", e => {
-  const row = e.target.closest(".mrow");
-  if (!row || !modelDragArmed) { e.preventDefault(); return; }
-  modelDragId = row.dataset.mid;
-  row.classList.add("dragging");
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/plain", modelDragId);
-});
-mainPanel.addEventListener("dragover", e => {
-  if (!modelDragId) return;
-  if (!e.target.closest(".mtable")) return;
-  e.preventDefault();
-  const row = e.target.closest(".mrow");
-  $$("#main .mrow").forEach(el => el.classList.remove("drop-before"));
-  if (row && row.dataset.mid !== modelDragId) row.classList.add("drop-before");
-});
-mainPanel.addEventListener("drop", async e => {
-  const table = e.target.closest(".mtable");
-  if (!modelDragId || !table) return;
-  e.preventDefault();
-  const row = e.target.closest(".mrow");
-  $$("#main .mrow").forEach(el => el.classList.remove("drop-before", "dragging"));
-  const dragged = modelDragId;
-  modelDragId = null;
-  if (!row || row.dataset.mid === dragged) return;
-  const ids = $$("#main .mtable .mrow").map(el => el.dataset.mid).filter(id => id !== dragged);
-  const at = ids.indexOf(row.dataset.mid);
-  ids.splice(at < 0 ? ids.length : at, 0, dragged);
-  try {
-    apply(await api("/api/model/reorder", { providerId: sel.providerId, ids }));
-    toast("模型顺序已调整（记得保存）", "ok", 2000);
-  } catch (e2) { toast(e2.message, "err"); }
-});
-mainPanel.addEventListener("dragend", () => {
-  modelDragId = null;
-  $$("#main .mrow").forEach(el => el.classList.remove("dragging", "drop-before"));
-});
+  const render = () => {
+    body.innerHTML = `
+      <div class="dlg-head"><h3>${esc(title)}</h3><button type="button" class="btn icon" data-ro-close>✕</button></div>
+      ${hint ? `<p class="hint">${hint}</p>` : ""}
+      <div id="ro-list">
+        ${order.map((it, i) => `
+          <div class="ro-row" draggable="true" data-ro-i="${i}">
+            <span class="grip" data-ro-grip title="拖动调整顺序">⋮⋮</span>
+            <span class="ro-label" title="${esc(it.label)}">${esc(it.label)}</span>
+            ${it.sub ? `<span class="s-meta mono">${esc(it.sub)}</span>` : ""}
+            <span class="ro-btns">
+              <button type="button" class="btn icon" data-ro-up ${i === 0 ? "disabled" : ""} title="上移">↑</button>
+              <button type="button" class="btn icon" data-ro-down ${i === order.length - 1 ? "disabled" : ""} title="下移">↓</button>
+            </span>
+          </div>`).join("")}
+      </div>
+      <div class="dlg-actions">
+        <button type="button" class="btn" data-ro-cancel>取消</button>
+        <button type="button" class="btn primary" data-ro-done>完成${changed ? "（已调整）" : ""}</button>
+      </div>`;
+
+    body.querySelector("[data-ro-close]").onclick = () => $("#dlg-generic").close();
+    body.querySelector("[data-ro-cancel]").onclick = () => $("#dlg-generic").close();
+    body.querySelector("[data-ro-done]").onclick = () => {
+      $("#dlg-generic").close();
+      if (changed) onCommit(order.map(x => x.id));
+    };
+    body.querySelectorAll("[data-ro-up]").forEach((b, i) => b.onclick = () => move(i, i - 1));
+    body.querySelectorAll("[data-ro-down]").forEach((b, i) => b.onclick = () => move(i, i + 1));
+
+    const list = body.querySelector("#ro-list");
+    let armed = false;
+    list.addEventListener("mousedown", e => { armed = !!e.target.closest("[data-ro-grip]"); });
+    list.querySelectorAll(".ro-row").forEach(row => {
+      const i = +row.dataset.roI;
+      row.addEventListener("dragstart", e => {
+        if (!armed) { e.preventDefault(); return; }
+        row.dataset.roDrag = "1";
+        row.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(i));
+      });
+      row.addEventListener("dragover", e => {
+        e.preventDefault();
+        list.querySelectorAll(".ro-row").forEach(r => r.classList.remove("ro-drop"));
+        if (+row.dataset.roI !== i) row.classList.add("ro-drop");
+      });
+      row.addEventListener("drop", e => {
+        e.preventDefault();
+        const j = +row.dataset.roI;
+        if (j !== i) { const [x] = order.splice(i, 1); order.splice(j, 0, x); changed = true; }
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        list.querySelectorAll(".ro-row").forEach(r => r.classList.remove("ro-drop"));
+        if (changed) render();
+      });
+    });
+  };
+
+  const move = (i, j) => {
+    if (j < 0 || j >= order.length || i === j) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    changed = true;
+    render();
+  };
+
+  render();
+  openDialog($("#dlg-generic"));
+}
+
+function openProviderReorder() {
+  openReorderDialog({
+    title: "调整提供商显示顺序",
+    hint: "拖动 ⋮⋮ 或点击 ↑↓ 调整；顺序会同步到 zcode 的提供商列表。点「完成」应用后记得保存。",
+    items: state.providers.map(p => ({ id: p.id, label: p.name || p.id, sub: `${p.models.length} 个模型` })),
+    onCommit: async ids => {
+      try {
+        apply(await api("/api/provider/reorder", { ids }));
+        toast("提供商顺序已更新（记得保存）", "ok", 2500);
+      } catch (e) { toast(e.message, "err"); }
+    },
+  });
+}
+
+function openModelReorder(pid) {
+  const p = findProvider(pid);
+  if (!p || p.models.length < 2) { toast("至少需要两个模型才能排序", "warn"); return; }
+  openReorderDialog({
+    title: `调整模型顺序 — ${p.name || p.id}`,
+    hint: "拖动 ⋮⋮ 或点击 ↑↓ 调整；models 的键序即 zcode 中的显示顺序。点「完成」应用后记得保存。",
+    items: p.models.map(m => ({
+      id: m.id,
+      label: m.id,
+      sub: [m.name, m.hasReasoning && m.enabled ? `默认 ${m.defaultVariant || "on"}` : ""].filter(Boolean).join(" · "),
+    })),
+    onCommit: async ids => {
+      try {
+        apply(await api("/api/model/reorder", { providerId: pid, ids }));
+        toast("模型顺序已更新（记得保存）", "ok", 2500);
+      } catch (e) { toast(e.message, "err"); }
+    },
+  });
+}
 
 /* ---------- 顶栏与初始化 ---------- */
 $("#search").addEventListener("input", e => { query = e.target.value; renderSidebar(); });
@@ -1452,6 +1476,7 @@ $("#btn-snap-create").addEventListener("click", createSnapshot);
 $("#snap-name").addEventListener("keydown", e => { if (e.key === "Enter") createSnapshot(); });
 $("#btn-raw-copy").addEventListener("click", () => copyText($("#raw-view").textContent, "已复制 JSON"));
 $("#st-path").addEventListener("click", () => copyText(state.configPath, "已复制配置路径"));
+$("#btn-side-reorder").addEventListener("click", openProviderReorder);
 $$("dialog [data-close]").forEach(b =>
   b.addEventListener("click", () => b.closest("dialog").close())
 );

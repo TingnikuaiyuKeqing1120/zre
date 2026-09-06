@@ -107,7 +107,6 @@ input[type="number"] { font-family: var(--mono); }
 .side-hint { padding: 8px 14px; font-size: 11px; color: var(--text-faint); border-top: 1px solid var(--border); }
 
 .prov { margin-bottom: 4px; border-radius: 9px; }
-.prov.drop-before { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .prov-row {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 8px;
@@ -117,7 +116,6 @@ input[type="number"] { font-family: var(--mono); }
 }
 .prov-row:hover { background: #1a2030; }
 .prov.selected > .prov-row { background: #202941; }
-.prov.dragging { opacity: .4; }
 .grip { color: var(--text-faint); cursor: grab; font-size: 13px; letter-spacing: -1px; padding: 0 2px; }
 .grip:hover { color: var(--text); }
 .chev { color: var(--text-dim); font-size: 10px; width: 14px; transition: transform .12s; }
@@ -360,9 +358,6 @@ dialog::backdrop { background: rgba(5,8,14,.62); backdrop-filter: blur(2px); }
 #main > * { max-width: 1080px; margin-left: auto; margin-right: auto; }
 
 .mrow { border: 1px solid transparent; }
-.mrow.drop-before { border-color: var(--accent); }
-.mrow.dragging { opacity: .4; }
-.mrow-grip { color: var(--text-faint); cursor: grab; }
 
 .tpl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
 .tpl-row > label { color: var(--text-dim); font-size: 13.5px; }
@@ -385,3 +380,13 @@ dialog::backdrop { background: rgba(5,8,14,.62); backdrop-filter: blur(2px); }
 .fetch-main { display: flex; gap: 7px; align-items: center; flex: 1.2; min-width: 0; overflow: hidden; }
 .fetch-row input[type="number"] { width: 96px; }
 .fetch-row .fetch-name, .fetch-row .fetch-mod { width: 120px; }
+
+/* ---- 顺序调整弹窗 ---- */
+#ro-list { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.ro-row { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.ro-row .grip { cursor: grab; font-size: 14px; }
+.ro-row.dragging { opacity: .4; }
+.ro-row.ro-drop { border-color: var(--accent); }
+.ro-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ro-btns { display: flex; gap: 4px; flex: none; }
+.ro-btns .btn { padding: 2px 9px; }
