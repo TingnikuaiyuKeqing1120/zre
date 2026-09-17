@@ -530,20 +530,42 @@ func (sv *Server) matchOne(providerID, modelID string) (source, matchLabel strin
 			}
 		}
 	}
-	if _, err := sv.store.UpdateModel(providerID, modelID, config.ModelUpdate{
+	// 目录若声明了上下文/输出，一并写入 limit（保留模型已有的更大值语义由用户手动调）
+	update := config.ModelUpdate{
 		Reasoning: &config.ReasoningInput{
 			Enabled:        enabled,
 			Variants:       e.Variants,
 			DefaultVariant: e.Default,
 		},
-	}); err != nil {
+	}
+	if e.Context > 0 || e.Output > 0 {
+		st0 := sv.store.State()
+		var curCtx, curOut int64
+		for _, pp := range st0.Providers {
+			if pp.ID != providerID {
+				continue
+			}
+			for _, mm := range pp.Models {
+				if mm.ID == modelID {
+					curCtx, curOut = mm.Context, mm.Output
+				}
+			}
+		}
+		newCtx, newOut := curCtx, curOut
+		if e.Context > curCtx {
+			newCtx = e.Context
+		}
+		if e.Output > curOut {
+			newOut = e.Output
+		}
+		if newCtx > 0 || newOut > 0 {
+			update.Limit = &config.LimitInput{Context: newCtx, Output: newOut}
+		}
+	}
+	if _, err := sv.store.UpdateModel(providerID, modelID, update); err != nil {
 		return "", "", false, err
 	}
-	source = strings.TrimSpace(e.ProviderName)
-	if source == "" {
-		source = e.ProviderID
-	}
-	source = source + " / " + e.ModelID
+	source = "zcode 官方规则"
 	return source, label, true, nil
 }
 
@@ -809,9 +831,6 @@ func (sv *Server) handleProviderFetchModels(w http.ResponseWriter, r *http.Reque
 	for _, it := range items {
 		m := fetchModelItem{ID: it.id, Name: it.name, InputMod: []string{"text"}, OutputMod: []string{"text"}}
 		if e, _, _ := sv.catalog().MatchLabel(it.id); e != nil {
-			if m.Name == "" {
-				m.Name = e.ModelName
-			}
 			m.Context, m.Output = e.Context, e.Output
 			if len(e.InputMod) > 0 {
 				m.InputMod = e.InputMod
@@ -819,11 +838,7 @@ func (sv *Server) handleProviderFetchModels(w http.ResponseWriter, r *http.Reque
 			if len(e.OutputMod) > 0 {
 				m.OutputMod = e.OutputMod
 			}
-			srcName := e.ProviderName
-			if srcName == "" {
-				srcName = e.ProviderID
-			}
-			m.Catalog = srcName + " / " + e.ModelID
+			m.Catalog = "zcode 官方规则"
 		}
 		out = append(out, m)
 	}

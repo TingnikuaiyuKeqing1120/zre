@@ -23,7 +23,7 @@ import (
 	"zre/internal/tray"
 )
 
-var version = "0.1.2"
+var version = "0.1.3"
 
 // defaultTray 由构建注入：托盘版（-H windowsgui）构建时设为 true，
 // 使 bin/zre-tray.exe 双击即进入托盘模式；控制台版保持 false。
@@ -147,11 +147,11 @@ func resolveCatalogPaths(flagVal string, settingPaths []string) ([]string, bool)
 	}
 	var paths []string
 	if home, err := os.UserHomeDir(); err == nil {
-		// 常见安装位置：不写死任何个人的父目录名，用通配探测 <home>\*\zcodeesources\model-providers
-		if matches, _ := filepath.Glob(filepath.Join(home, "*", "zcode", "resources", "model-providers")); len(matches) > 0 {
+		// zcode >= v3.12.3: 规则目录在 <安装目录>/resources/config/provider/，通配探测常见安装位置
+		if matches, _ := filepath.Glob(filepath.Join(home, "*", "zcode", "resources", "config", "provider")); len(matches) > 0 {
 			paths = append(paths, matches...)
 		}
-		paths = append(paths, filepath.Join(home, ".zcode", "resources", "model-providers"))
+		paths = append(paths, filepath.Join(home, ".zcode", "resources", "config", "provider"))
 	}
 	return paths, false
 }
